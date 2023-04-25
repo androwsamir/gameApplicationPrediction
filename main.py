@@ -24,3 +24,11 @@ if __name__=='__main__':
 
     # Create Object of Preprocess Class
     preprocess = Preprocessing.Preprocess(x_train, x_test, y_train, y_test)
+    
+    #X['Age Rating'] = X['Age Rating'].str.replace('+' , '')
+    #X['Age Rating'] = X['Age Rating'].astype(int)
+    colums_lbl=('Developer','Primary Genre' , 'Languages' , 'Genres' ,'Age Rating')
+    colums_hot=('Languages' , 'Genres')
+
+    X =Preprocessing.pre_lbl_encoding(X , colums_lbl)
+    #Preprocessing.pre_hot_encoding(X , colums_hot)
