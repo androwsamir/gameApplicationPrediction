@@ -20,17 +20,29 @@ def preprocess_input(filename):
 
     return X, Y
 
-def featureSelection(data, input):
+def featureSelectionNumerical(data, input):
+    # Compute the correlation matrix
+    corr_matrix = data.corr()
+    # Select top features based on correlation with output variable
+    top_featureNumerical = corr_matrix.index[abs(corr_matrix['Average User Rating']) > 0.05]
+    top_featureNumerical = top_featureNumerical.delete(-1)
+    saveLoad.saveModel(top_featureNumerical, 'topFeatureNumerical')
+    inputData = input[top_featureNumerical]
+
+    return inputData
+
+def featureSelectionCategorical(data, input):
 
     selector = SelectKBest(f_regression, k=5)
     inputData = selector.fit_transform(input, data['Average User Rating'])
     # Get the names of the selected features
     mask = selector.get_support()  # Get a boolean mask of the selected features
-    top_feature = input.columns[mask]  # Index the feature names using the mask
+    top_featureCategorical = input.columns[mask]  # Index the feature names using the mask
+
+    inputData = pd.DataFrame(inputData, columns=top_featureCategorical)
 
     # Print the selected feature names
-    saveLoad.saveModel(top_feature, 'topFeatures')
-    print(top_feature)
+    saveLoad.saveModel(top_featureCategorical, 'topFeaturesCategorical')
     return inputData
 
 def calculateMSE(prediction, actualValue):
@@ -58,72 +70,73 @@ if __name__=='__main__':
     # Clean Training Data
     x_train, y_train = preprocess.trainDataCleaning()
 
-    # Concatenate x_train and y_train in data
-    data = pd.concat([pd.DataFrame(x_train), pd.DataFrame(y_train)], axis=1)
+    x_train =x_train.copy()
+    xNumerical = x_train.iloc[:, 0:1]
+    xNumerical = xNumerical.copy()
+    xNumerical['Size'] = x_train['Size']
 
-    # Apply feature selection on x_train
-    x_train = featureSelection(data, x_train)
+    xCategorical = x_train.iloc[:, 5:]
+    xCategorical['Developer'] = x_train['Developer']
+    xCategorical['Age Rating'] = x_train['Age Rating']
+
+    # Concatenate x_train and y_train in data
+    categoricalData = pd.concat([pd.DataFrame(xCategorical.reset_index(drop=True)), pd.DataFrame(y_train.reset_index(drop=True))], axis=1)
+    numericalData = pd.concat([pd.DataFrame(xNumerical.reset_index(drop=True)), pd.DataFrame(y_train.reset_index(drop=True))], axis=1)
+
+    xNumerical = featureSelectionNumerical(numericalData, xNumerical)
+
+    xCategorical = featureSelectionCategorical(categoricalData, xCategorical)
+
+
+    x_train = pd.concat([pd.DataFrame(xCategorical.reset_index(drop=True)), pd.DataFrame(xNumerical.reset_index(drop=True))], axis=1)
 
     # Create object of Regression class and set constructor to x_train, y_train
     regression = Regression.regression(x_train, y_train)
 
     # Train models on x_train, y_train and predict x_train
-    y_poly, y_lasso, y_decision, rfPrediction, svrPrediction, enetPrediction = regression.train()
+    y_poly, y_decision, rfPrediction, enetPrediction = regression.train()
 
     print("=====================================Train=============================================")
     # print MSE
-    print("MSE Polynomial ==> ")
+    print("Polynomial ==> ")
     calculateMSE(np.asarray(y_poly), np.asarray(y_train))
     calculateR2Score(y_poly, y_train)
 
-    print("MSE lasso Regression ==> ")
-    calculateMSE(np.asarray(y_lasso), np.asarray(y_train))
-    calculateR2Score(y_lasso, y_train)
-
-    print("MSE decision Regression ==> ")
+    print("decision Regression ==> ")
     calculateMSE(np.asarray(y_decision), np.asarray(y_train))
     calculateR2Score(y_decision, y_train)
 
-    print("MSE RandomForest Regression ==> ")
+    print("RandomForest Regression ==> ")
     calculateMSE(np.asarray(rfPrediction), np.asarray(y_train))
     calculateR2Score(rfPrediction, y_train)
 
-    print("MSE Elastic Regression ==> ")
+    print("Elastic Regression ==> ")
     calculateMSE(np.asarray(enetPrediction), np.asarray(y_train))
     calculateR2Score(enetPrediction, y_train)
 
-    print("MSE SVR Regression ==> ")
-    calculateMSE(np.asarray(svrPrediction), np.asarray(y_train))
-    calculateR2Score(svrPrediction, y_train)
-
     testPredict = test.TestPredict(x_test)
     xTest = testPredict.preprocess()
-    topFeature = saveLoad.loadModel('topFeatures')
-    xTest = xTest[topFeature]
-    polyPredict, lassoPredict, decisionTreePredict, rfPrediction, svrPrediction, enetPrediction = testPredict.predict(xTest)
+    topFeatureNumerical = saveLoad.loadModel('topFeatureNumerical')
+    topFeaturesCategorical = saveLoad.loadModel('topFeaturesCategorical')
+
+    xTest = pd.concat([pd.DataFrame(xTest[topFeatureNumerical]), pd.DataFrame(xTest[topFeaturesCategorical])], axis=1)
+
+    polyPredict, decisionTreePredict, rfPrediction, enetPrediction = testPredict.predict(xTest)
 
     print("=====================================Test=============================================")
     # print MSE
-    print("MSE Polynomial ==> ")
+    print("Polynomial ==> ")
     calculateMSE(np.asarray(polyPredict), np.asarray(y_test))
     calculateR2Score(polyPredict, y_test)
 
-    print("MSE lasso Regression ==> ")
-    calculateMSE(np.asarray(lassoPredict), np.asarray(y_test))
-    calculateR2Score(lassoPredict, y_test)
-
-    print("MSE decision Regression ==> ")
+    print("decision Regression ==> ")
     calculateMSE(np.asarray(decisionTreePredict), np.asarray(y_test))
     calculateR2Score(decisionTreePredict, y_test)
 
-    print("MSE RandomForest Regression ==> ")
+    print("RandomForest Regression ==> ")
     calculateMSE(np.asarray(rfPrediction), np.asarray(y_test))
     calculateR2Score(rfPrediction, y_test)
 
-    print("MSE Elastic Regression ==> ")
+    print("Elastic Regression ==> ")
     calculateMSE(np.asarray(enetPrediction), np.asarray(y_test))
     calculateR2Score(enetPrediction, y_test)
-
-    print("MSE SVR Regression ==> ")
-    calculateMSE(np.asarray(svrPrediction), np.asarray(y_test))
-    calculateR2Score(svrPrediction, y_test)

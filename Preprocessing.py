@@ -49,19 +49,27 @@ class Preprocess:
         self.X.drop('Current Version Release Date', axis=1, inplace=True)
         self.X.drop('Original Release Date', axis=1, inplace=True)
 
-    def handleDescription(self):
+    def handleDescription(self, train=True):
         # Convert ndarray to pandas Series
         data = pd.Series(self.X['Description'])
-        # Tokenize the text data and create TaggedDocuments
-        tagged_data = [TaggedDocument(words=word_tokenize(str(_d).lower()), tags=[str(i)]) for i, _d in
-                       enumerate(data)]
-        # Train a Doc2Vec model on the TaggedDocuments
-        model = Doc2Vec(tagged_data, vector_size=50, window=5, min_count=1, workers=4)
-        # Convert each text description into a vector
+
+        if train:
+            # Tokenize the text data and create TaggedDocuments
+            tagged_data = [TaggedDocument(words=word_tokenize(str(_d).lower()), tags=[str(i)]) for i, _d in
+                           enumerate(data)]
+            # Train a Doc2Vec model on the TaggedDocuments
+            model = Doc2Vec(tagged_data, vector_size=100, window=5, min_count=1, workers=4)
+            # Save the trained model to a file using pickle
+            self.saveLoad.saveModel(model, 'doc2vec_model')
+        else:
+            # Load the trained model from the file using pickle
+            model = self.saveLoad.loadModel('doc2vec_model')
+
+        # Convert each text description into a vector using the trained model
         data = pd.Series(data).apply(
             lambda x: model.infer_vector(word_tokenize(str(x).lower())))
         # Convert the list of vectors to a DataFrame
-        new_colDescr = pd.DataFrame(data.to_list(), columns=[f'doc2vec_{i}' for i in range(50)])
+        new_colDescr = pd.DataFrame(data.to_list(), columns=[f'doc2vec_{i}' for i in range(100)])
         # concatenate dense matrix with other columns
         self.X = pd.concat([self.X.reset_index(drop=True), new_colDescr], axis=1)
         # droop Description column
@@ -96,13 +104,12 @@ class Preprocess:
             outliers = self.X[
                 (self.X[col] < lower_bound[col]) | (self.X[col] > upper_bound[col])].index
             outlier_indices.extend(outliers)
-
         data.drop(outlier_indices, inplace=True)
 
         return data
 
     def dropColumns(self, data):
-        dropList = [ 'Subtitle', 'Name', 'ID', 'URL', 'Icon URL', 'Games', 'Strategy', 'Description']
+        dropList = [ 'Subtitle', 'Name', 'ID', 'URL', 'Icon URL', 'Games', 'Strategy', 'Price']
         for element in dropList:
             data.drop(element, axis=1, inplace=True)
 
@@ -155,7 +162,7 @@ class Preprocess:
         self.handleDate()
         # ===================================================================================================================================
         # Handle description column
-        # self.handleDescription()
+        self.handleDescription(True)
         # ===================================================================================================================================
         oneHotEncodingList = ['Languages', 'Genres']
         # Handle Languages & Genres columns
@@ -195,12 +202,15 @@ class Preprocess:
         # Handle date column
         self.handleDate()
         # ===================================================================================================================================
+        # Handle description column
+        self.handleDescription(False)
+        # ===================================================================================================================================
         # Load oneHotEncode of Languages & Genres
         oneHotEncode_dict = self.saveLoad.loadModel('languageGenresEncode')
         for columnName in oneHotEncode_dict.keys():
             # get the encoded column names for the current column
             encoded_cols = oneHotEncode_dict.get(columnName)
-            # Apply one-hot encoding to columnName column
+            # 'Apply one-hot encoding to columnName column'
             df_encoded = self.X[columnName].str.get_dummies(', ')
             df_encoded = df_encoded.reindex(columns=encoded_cols, fill_value=0)
             # Concatenate encoded columns to original dataframe X

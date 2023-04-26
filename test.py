@@ -25,6 +25,6 @@ class TestPredict:
         # Create object of regression and set constructor to xTest
         regression = Regression.regression(xTest)
         # Get prediction of xtest
-        polyPredict, lassoPredict, decisionTreePredict, rfPrediction, svrPrediction, enetPrediction = regression.test()
+        polyPredict, decisionTreePredict, rfPrediction, enetPrediction = regression.test()
 
-        return polyPredict, lassoPredict, decisionTreePredict, rfPrediction, svrPrediction, enetPrediction
+        return polyPredict, decisionTreePredict, rfPrediction, enetPrediction
