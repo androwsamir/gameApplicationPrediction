@@ -66,14 +66,24 @@ class Preprocess:
             model = self.saveLoad.loadModel('doc2vec_model')
 
         # Convert each text description into a vector using the trained model
-        data = pd.Series(data).apply(
-            lambda x: model.infer_vector(word_tokenize(str(x).lower())))
+        if train:
+            data_vectors = [model.infer_vector(word_tokenize(str(x).lower())) for x in data]
+        else:
+            data_vectors = [model.infer_vector(word_tokenize(str(x).lower())) for x in self.X['Description']]
+
         # Convert the list of vectors to a DataFrame
-        new_colDescr = pd.DataFrame(data.to_list(), columns=[f'doc2vec_{i}' for i in range(100)])
-        # concatenate dense matrix with other columns
-        self.X = pd.concat([self.X.reset_index(drop=True), new_colDescr], axis=1)
-        # droop Description column
-        self.X.drop('Description', axis=1, inplace=True)
+        new_colDescr = pd.DataFrame(data_vectors, columns=[f'doc2vec_{i}' for i in range(100)])
+
+        if train:
+            # Concatenate dense matrix with other columns for training data
+            self.X = pd.concat([self.X.reset_index(drop=True), new_colDescr], axis=1)
+            # Drop Description column
+            self.X.drop('Description', axis=1, inplace=True)
+        else:
+            # Concatenate dense matrix with other columns for test data
+            self.X = pd.concat([self.X.reset_index(drop=True), new_colDescr], axis=1)
+            # Drop Description column
+            self.X .drop('Description', axis=1, inplace=True)
 
     def handleLanguageGenres(self, columns):
 
@@ -94,22 +104,22 @@ class Preprocess:
 
     def handle_outliers(self, columns, data):
         # Handle outliers
-        Q1 = self.X[columns].quantile(0.25)
-        Q3 = self.X[columns].quantile(0.75)
+        Q1 = data[columns].quantile(0.25)
+        Q3 = data[columns].quantile(0.75)
         IQR = Q3 - Q1
         lower_bound = Q1 - 1.5 * IQR
         upper_bound = Q3 + 1.5 * IQR
         outlier_indices = []
         for col in columns:
-            outliers = self.X[
-                (self.X[col] < lower_bound[col]) | (self.X[col] > upper_bound[col])].index
+            outliers = data[
+                (data[col] < lower_bound[col]) | (data[col] > upper_bound[col])].index
             outlier_indices.extend(outliers)
         data.drop(outlier_indices, inplace=True)
 
         return data
 
     def dropColumns(self, data):
-        dropList = [ 'Subtitle', 'Name', 'ID', 'URL', 'Icon URL', 'Games', 'Strategy', 'Price']
+        dropList = [ 'Subtitle', 'Name', 'URL', 'Icon URL', 'Games', 'Strategy', 'Price']
         for element in dropList:
             data.drop(element, axis=1, inplace=True)
 
@@ -160,10 +170,43 @@ class Preprocess:
         # ===================================================================================================================================
         # Handle date column
         self.handleDate()
+        print(self.X.columns)
+        # ===================================================================================================================================
+        userRateMean = self.X['User Rating Count'].mean()
+        sizeMean = self.X['Size'].mean()
+
+        developerMode = self.X['Developer'].mode()
+        ageRatingMode = self.X['Age Rating'].mode()
+        primaryGenreMode = self.X['Primary Genre'].mode()
+        genresrMode = self.X['Genres'].mode()
+        languagesMode = self.X['Languages'].mode()
+        descriptionMode = self.X['Description'].mode()
+        yearMode = self.X['year'].mode()
+        monthMode = self.X['Month'].mode()
+        dayMode = self.X['Day'].mode()
+        oYearMode = self.X['Oyear'].mode()
+        oMonthMode = self.X['OMonth'].mode()
+        oDayMode = self.X['ODay'].mode()
+
+        self.saveLoad.saveModel(userRateMean, 'userRateMean')
+        self.saveLoad.saveModel(sizeMean, 'sizeMean')
+        self.saveLoad.saveModel(developerMode, 'developerMode')
+        self.saveLoad.saveModel(ageRatingMode, 'ageRatingMode')
+        self.saveLoad.saveModel(primaryGenreMode, 'primaryGenreMode')
+        self.saveLoad.saveModel(genresrMode, 'genresrMode')
+        self.saveLoad.saveModel(languagesMode, 'languagesMode')
+        self.saveLoad.saveModel(descriptionMode, 'descriptionMode')
+        self.saveLoad.saveModel(yearMode, 'yearMode')
+        self.saveLoad.saveModel(monthMode, 'monthMode')
+        self.saveLoad.saveModel(dayMode, 'dayMode')
+        self.saveLoad.saveModel(oYearMode, 'oYearMode')
+        self.saveLoad.saveModel(oMonthMode, 'oMonthMode')
+        self.saveLoad.saveModel(oDayMode, 'oDayMode')
         # ===================================================================================================================================
         # Handle description column
         self.handleDescription(True)
         # ===================================================================================================================================
+        self.X.drop('ID', axis=1, inplace=True)
         oneHotEncodingList = ['Languages', 'Genres']
         # Handle Languages & Genres columns
         self.handleLanguageGenres(oneHotEncodingList)
@@ -172,6 +215,13 @@ class Preprocess:
         # ===================================================================================================================================
         # Drop unique & constant columns
         self.X = self.dropColumns(self.X)
+        uniqueColumns = []
+        for col in self.X.columns:
+            if not self.X[col].duplicated().any():
+                self.X.drop(col, axis=1, inplace=True)
+                uniqueColumns.append(col)
+
+        self.saveLoad.saveModel(uniqueColumns, 'uniqueColumns')
         # ===================================================================================================================================
         # Handle Null Values of In-app Purchases column
         # Calculate Mean of In-app Purchases column
@@ -192,19 +242,38 @@ class Preprocess:
         self.scale_data(listScale)
         # Save scale model
         self.saveLoad.saveModel(self.scaler, 'scalingValues')
+        # ===================================================================================================================================
 
         return self.X, self.Y
 
     def testDataCleaning(self):
+        userRateMean = self.saveLoad.loadModel('userRateMean')
+        sizeMean = self.saveLoad.loadModel('sizeMean')
+        developerMode = self.saveLoad.loadModel('developerMode')
+        ageRatingMode = self.saveLoad.loadModel('ageRatingMode')
+        primaryGenreMode = self.saveLoad.loadModel('primaryGenreMode')
+        genresrMode = self.saveLoad.loadModel('genresrMode')
+        languagesMode = self.saveLoad.loadModel('languagesMode')
+        descriptionMode = self.saveLoad.loadModel('descriptionMode')
+        yearMode = self.saveLoad.loadModel('yearMode')
+        monthMode = self.saveLoad.loadModel('monthMode')
+        dayMode = self.saveLoad.loadModel('dayMode')
+        oYearMode = self.saveLoad.loadModel('oYearMode')
+        oMonthMode = self.saveLoad.loadModel('oMonthMode')
+        oDayMode = self.saveLoad.loadModel('oDayMode')
+        # ===================================================================================================================================
         # Handle In-app Purchases
         self.inAppPurchases()
         # ===================================================================================================================================
         # Handle date column
         self.handleDate()
         # ===================================================================================================================================
+
+        # ===================================================================================================================================
         # Handle description column
         self.handleDescription(False)
         # ===================================================================================================================================
+        self.X.drop('ID', axis=1, inplace=True)
         # Load oneHotEncode of Languages & Genres
         oneHotEncode_dict = self.saveLoad.loadModel('languageGenresEncode')
         for columnName in oneHotEncode_dict.keys():
@@ -220,11 +289,14 @@ class Preprocess:
         # ===================================================================================================================================
         # Drop unique & constant columns
         self.X = self.dropColumns(self.X)
+        uniqueColumns = self.saveLoad.loadModel('uniqueColumns')
+        # Drop the unique columns from the X dataframe
+        self.X.drop(uniqueColumns, axis=1, inplace=True)
         # ===================================================================================================================================
         # Load Mean of In-app Purchases column
         columnMean = self.saveLoad.loadModel('inAppPurchasesMean')
         # Fill null values with mean
-        self.X['In-app Purchases'].fillna(columnMean, inplace=True)
+        self.X.loc[:, 'In-app Purchases'] = self.X['In-app Purchases'].fillna(columnMean)
         # ===================================================================================================================================
         # Load labelEncode_dict
         labelEncode_dict = self.saveLoad.loadModel('EncodeValues')
